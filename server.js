@@ -19,7 +19,6 @@ app.use(express.json());
 // CORS setup for frontend
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:19000' }));
 
-
 // Content Security Policy Middleware (optional for production)
 app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self' data:;");
