@@ -7,4 +7,3 @@ const TamagotchiSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Tamagotchi', TamagotchiSchema);
-
