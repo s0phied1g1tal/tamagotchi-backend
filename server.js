@@ -28,17 +28,25 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
   .catch((err) => console.log(err));
 
 // Set up session middleware
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+
+// Session setup with MongoDB store
 app.use(session({
-  secret: process.env.SESSION_SECRET, // Loaded from the .env file
+  secret: process.env.SESSION_SECRET, 
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,  // Ensure this line is correct
+    ttl: 14 * 24 * 60 * 60  // Optional: session time-to-live (TTL) in seconds
+  }),
   cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
-    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    secure: process.env.NODE_ENV === 'production', // Secure cookie in production
     httpOnly: true
   }
 }));
+
 
 // Initialize Passport
 app.use(passport.initialize());
