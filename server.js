@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const session = require('express-session');
+const session = require('express-session'); // Keep this one
 const MongoStore = require('connect-mongo'); // Use MongoDB for session storage
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -27,11 +27,7 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.log(err));
 
-// Set up session middleware
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-
-// Session setup with MongoDB store
+// Set up session middleware (no duplicate declaration)
 app.use(session({
   secret: process.env.SESSION_SECRET, 
   resave: false,
@@ -46,7 +42,6 @@ app.use(session({
     httpOnly: true
   }
 }));
-
 
 // Initialize Passport
 app.use(passport.initialize());
