@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
+const MongoStore = require('connect-mongo'); // Use MongoDB for session storage
 const dotenv = require('dotenv');
 const cors = require('cors');
 const tamagotchiRoutes = require('./routes/tamagotchiRoutes'); // Adjust path if needed
@@ -16,7 +17,10 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // CORS middleware
-app.use(cors());
+app.use(cors({
+  origin: 'exp://localhost:19000', // Replace with your frontend's URL (Expo development URL)
+  credentials: true
+}));
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -25,9 +29,15 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
 
 // Set up session middleware
 app.use(session({
-  secret: 'your-session-secret', // Replace with a secure secret in production
+  secret: process.env.SESSION_SECRET, // Loaded from the .env file
   resave: false,
-  saveUninitialized: true
+  saveUninitialized: false,
+  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    httpOnly: true
+  }
 }));
 
 // Initialize Passport
@@ -39,9 +49,19 @@ passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   callbackURL: process.env.GOOGLE_REDIRECT_URI
-}, (accessToken, refreshToken, profile, done) => {
-  console.log('Google Profile:', profile);
-  return done(null, profile); // Pass the Google profile to serializeUser
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    console.log('Google Profile:', profile);
+    const user = {
+      id: profile.id,
+      displayName: profile.displayName,
+      email: profile.emails[0].value
+    };
+    return done(null, user); // Pass user to serializeUser
+  } catch (error) {
+    console.error('Error in Google Strategy:', error);
+    return done(error, null);
+  }
 }));
 
 // Serialize user info into session
@@ -59,37 +79,34 @@ app.get('/', (req, res) => {
   res.send('Welcome to the Tamagotchi API!');
 });
 
-// Google Auth routes
-app.post('/auth/google/callback', (req, res) => {
-  const { token } = req.body;
+// Google OAuth callback route
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/' }),
+  (req, res) => {
+    const user = req.user;
+    console.log('Authenticated User:', user);
 
-  if (!token) {
-    return res.status(400).send('No token provided');
+    // Dynamically set the redirect URI based on environment (local or production)
+    const redirectUri = process.env.NODE_ENV === 'production'
+      ? 'https://tamagotchi-backend.onrender.com'  // Production (Render URL)
+      : 'http://localhost:19000'; // Local development (Expo)
+
+    const userInfo = {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email
+    };
+
+    const redirectUrl = `${redirectUri}?user=${encodeURIComponent(JSON.stringify(userInfo))}`;
+    res.redirect(redirectUrl);
   }
-
-  const { OAuth2Client } = require('google-auth-library');
-  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
-  // Verify the token sent from the frontend
-  client.verifyIdToken({
-    idToken: token,
-    audience: process.env.GOOGLE_CLIENT_ID, // Ensure your client ID is correct
-  })
-  .then(ticket => {
-    const payload = ticket.getPayload();
-    console.log('Authenticated User:', payload);  // Optionally store user in your DB here
-    res.json({ success: true, user: payload });
-  })
-  .catch(error => {
-    console.error('Token verification failed:', error);
-    res.status(400).send('Invalid token');
-  });
-});
+);
 
 // Logout route
 app.get('/logout', (req, res) => {
-  req.logout();
-  res.redirect('/');
+  req.logout(() => {
+    res.redirect('/');
+  });
 });
 
 // Use the Tamagotchi API routes
