@@ -28,7 +28,10 @@ app.use((req, res, next) => {
 // Connect to MongoDB using the environment variable
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.log(err));
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1); // Exit the app if the connection fails
+  });
 
 // Set up session middleware with Mongo store
 app.use(session({
@@ -50,7 +53,7 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Google Auth configuration
+// Google Auth configuration using passport-google-oauth20
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -76,33 +79,21 @@ app.get('/', (req, res) => {
 });
 
 // Google Auth callback route
-app.post('/auth/google/callback', (req, res) => {
-  const { token } = req.body;
-  if (!token) {
-    return res.status(400).send('No token provided');
-  }
-  const { OAuth2Client } = require('google-auth-library');
-  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
-  client.verifyIdToken({
-    idToken: token,
-    audience: process.env.GOOGLE_CLIENT_ID, // Ensure your client ID is correct
-  })
-  .then(ticket => {
-    const payload = ticket.getPayload();
-    console.log('Authenticated User:', payload);
-    res.json({ success: true, user: payload });
-  })
-  .catch(error => {
-    console.error('Token verification failed:', error);
-    res.status(400).send('Invalid token');
-  });
+app.get('/auth/google/callback', passport.authenticate('google', {
+  failureRedirect: '/',
+}), (req, res) => {
+  // Successful authentication, redirect to the homepage or desired page
+  res.redirect('/');
 });
 
 // Logout route
 app.get('/logout', (req, res) => {
-  req.logout();
-  res.redirect('/');
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).send('Logout error');
+    }
+    res.redirect('/');
+  });
 });
 
 // Use the Tamagotchi routes
