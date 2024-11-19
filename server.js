@@ -25,13 +25,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// MongoDB connection using MONGO_URI from .env
+
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("MongoDB connected"))
   .catch((err) => {
     console.error('MongoDB connection error:', err);
-    process.exit(1); // Ensure the app exits if DB connection fails
+    process.exit(1); // Ensures app exits on DB failure
   });
+
 
 // Session setup using Mongo store
 app.use(session({
@@ -44,9 +45,9 @@ app.use(session({
   }),
   cookie: {
     maxAge: 24 * 60 * 60 * 1000, // 1 day
-    secure: process.env.NODE_ENV === 'production', // Ensure cookies are secure in production
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true
-  }
+  }  
 }));
 
 // Passport initialization
@@ -86,6 +87,7 @@ app.post('/auth/google/callback', (req, res) => {
   })
   .then(ticket => {
     const payload = ticket.getPayload();
+    // Optionally create/update user in the database here
     res.json({ success: true, user: payload });
   })
   .catch(error => {
@@ -93,6 +95,7 @@ app.post('/auth/google/callback', (req, res) => {
     res.status(400).send('Invalid token');
   });
 });
+
 
 // Logout route
 app.get('/logout', (req, res) => {
@@ -108,8 +111,9 @@ app.use('/tamagotchi', tamagotchiRoutes);
 // Global error handler (optional)
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).send('Something went wrong!');
+  res.status(500).json({ message: 'Something went wrong!', error: err.message });
 });
+
 
 // Start server
 app.listen(PORT, () => {
