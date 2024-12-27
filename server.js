@@ -19,24 +19,9 @@ app.use(express.json());
 // CORS setup for frontend
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:19000' }));
 
-// Content Security Policy Middleware (optional for production)
-app.use((req, res, next) => {
-  res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self' data:;");
-  next();
-});
-
-
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1); // Ensures app exits on DB failure
-  });
-
-
 // Session setup using Mongo store
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-session-secret',
+  secret: process.env.SESSION_SECRET || 'bT8$^gL7mXw2@!oCkYfZp',
   resave: false,
   saveUninitialized: true,
   store: MongoStore.create({
@@ -58,9 +43,10 @@ app.use(passport.session());
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_REDIRECT_URI
+  callbackURL: process.env.GOOGLE_REDIRECT_URI,
 }, (accessToken, refreshToken, profile, done) => {
-  return done(null, profile); // Handle profile after successful authentication
+  // Optionally, handle user creation or updating in the database here
+  return done(null, profile); 
 }));
 
 passport.serializeUser((user, done) => {
@@ -87,6 +73,7 @@ app.post('/auth/google/callback', (req, res) => {
   })
   .then(ticket => {
     const payload = ticket.getPayload();
+    console.log('Google payload:', payload); // Log the payload for debugging
     // Optionally create/update user in the database here
     res.json({ success: true, user: payload });
   })
@@ -95,7 +82,6 @@ app.post('/auth/google/callback', (req, res) => {
     res.status(400).send('Invalid token');
   });
 });
-
 
 // Logout route
 app.get('/logout', (req, res) => {
@@ -108,14 +94,12 @@ app.get('/logout', (req, res) => {
 // Tamagotchi routes
 app.use('/tamagotchi', tamagotchiRoutes);
 
-// Global error handler (optional)
+// Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!', error: err.message });
+  res.status(500).send('Something went wrong!');
 });
 
-
-// Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
