@@ -6,6 +6,7 @@ const session = require('express-session');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const MongoStore = require('connect-mongo');
+const helmet = require('helmet');
 const tamagotchiRoutes = require('./routes/tamagotchiRoutes'); // Your Tamagotchi-specific routes
 
 dotenv.config(); // Load environment variables
@@ -16,8 +17,20 @@ const PORT = process.env.PORT || 5000;
 // Middleware for parsing JSON bodies
 app.use(express.json());
 
+// Security headers setup using Helmet
+app.use(helmet());
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"], // Only allow resources from the same origin
+    imgSrc: ["'self'", "data:", "https://example.com"], // Allow images from data URIs and external sources
+    scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts if necessary
+    styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles if needed
+    connectSrc: ["'self'"], // Allow connections to the same origin
+  },
+}));
+
 // CORS setup for frontend
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:19000' }));
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:19000', credentials: true }));
 
 // Session setup using Mongo store
 app.use(session({
