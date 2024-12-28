@@ -33,11 +33,11 @@ app.use(helmet.contentSecurityPolicy({
   },
 }));
 
-// CORS setup for frontend
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:19000', // Make sure your frontend URL matches this
+  origin: process.env.FRONTEND_URL || 'https://tamagotchi-backend.onrender.com', // Use your deployed frontend URL here
   credentials: true,
 }));
+
 
 // Session setup using Mongo store
 app.use(session({
@@ -63,8 +63,8 @@ app.use(passport.session());
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_REDIRECT_URI || 'https://tamagotchi-backend.onrender.com/auth/google/callback',  // Ensure this is correct in production
-  scope: ['profile', 'email'],
+  callbackURL: process.env.GOOGLE_REDIRECT_URI || 'https://tamagotchi-backend.onrender.com/auth/google/callback',
+  scope: ['profile', 'email'], // Make sure the scope is defined here
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     console.log('Google profile:', profile); // Debugging log to check the profile data
@@ -106,6 +106,7 @@ app.get('/auth/google', passport.authenticate('google', {
 
 // Step 2: After Google redirects, fetch the user profile
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), async (req, res) => {
+  // Successfully authenticated, redirect to dashboard
   console.log('Google authentication successful'); // Debugging message
   res.redirect('/dashboard'); // Redirect to the dashboard after successful login
 });
@@ -129,13 +130,37 @@ app.get('/dashboard', (req, res) => {
   res.json({ message: 'Welcome to your dashboard!', user: req.user });
 });
 
+// Google token verification (optional, if you're using token directly from frontend)
+app.post('/auth/google/callback', async (req, res) => {
+  const { token } = req.body; // Token sent by frontend
+
+  try {
+    // Use the Google token to verify the user on the backend
+    const response = await axios.get(`https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${token}`);
+    
+    const profile = response.data;
+    const userId = profile.sub; // Use Google profile ID as user identifier
+
+    const Tamagotchi = require('./models/Tamagotchi');
+    let user = await Tamagotchi.findOne({ userId });
+    if (!user) {
+      user = await Tamagotchi.create({ userId, hunger: 100, fun: 100 });
+    }
+    
+    // Send response to frontend with user data
+    res.json({ user });
+  } catch (error) {
+    console.error('Google authentication failed:', error);
+    res.status(400).send('Authentication failed');
+  }
+});
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send('Something went wrong!');
 });
 
-// MongoDB connection setup
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
