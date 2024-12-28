@@ -52,6 +52,7 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000, // 1 day
     secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
     httpOnly: true, // For security reasons
+    sameSite: 'Strict', // Add SameSite for better security
   },
 }));
 
@@ -64,7 +65,7 @@ passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
   callbackURL: process.env.GOOGLE_REDIRECT_URI || 'https://tamagotchi-backend.onrender.com/auth/google/callback',
-  scope: ['profile', 'email'], // Add required scopes here
+  scope: ['profile', 'email'],
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     console.log('Google profile:', profile); // Debugging log to check the profile data
@@ -72,78 +73,56 @@ passport.use(new GoogleStrategy({
     const Tamagotchi = require('./models/Tamagotchi');
     
     // Check if user exists in the database
-    let user = await Tamagotchi.findOne({ userId });
+    let user = await Tamagotchi.findOne({ googleId: userId });
+
     if (!user) {
       // If user doesn't exist, create a new one
-      user = await Tamagotchi.create({ userId, hunger: 100, fun: 100 });
+      user = await Tamagotchi.create({
+        googleId: userId,
+        userName: profile.displayName,
+        email: profile.emails[0].value,
+        avatar: profile.photos[0].value,
+        hunger: 100,
+        fun: 100,
+      });
     }
-    return done(null, user); // Successfully authenticate the user
+
+    return done(null, user); // Return the user for session
   } catch (error) {
-    console.error('Error in Google strategy:', error);
-    return done(error, null); // Handle errors gracefully
+    console.error('Error in Google OAuth:', error);
+    return done(error);
   }
 }));
 
-passport.serializeUser((user, done) => {
-  done(null, user.userId); // Store only userId in session
-});
+// Route for Google OAuth login
+app.post('/auth/google/callback', (req, res) => {
+  const token = req.body.token; // Token from frontend
 
-passport.deserializeUser(async (userId, done) => {
-  const Tamagotchi = require('./models/Tamagotchi');
-  try {
-    const user = await Tamagotchi.findOne({ userId }); // Retrieve user from database
-    done(null, user);
-  } catch (error) {
-    done(error, null);
+  if (!token) {
+    return res.status(400).json({ message: 'Token missing' });
   }
-});
 
-// Google OAuth routes
-app.get('/auth/google', passport.authenticate('google', {
-  scope: ['profile', 'email'],
-}));
+  axios.post('https://oauth2.googleapis.com/tokeninfo', null, {
+    params: {
+      id_token: token,
+    },
+  }).then((response) => {
+    const { sub: googleId, email, name } = response.data;
 
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), async (req, res) => {
-  console.log('Google authentication successful');
-  res.redirect('/dashboard'); // Redirect to the dashboard after successful login
-});
-
-// Logout route
-app.get('/logout', (req, res) => {
-  req.logout((err) => {
-    if (err) return res.status(500).send('Logout failed');
-    res.redirect('/'); // Redirect to home after logout
+    res.json({ user: { googleId, email, name } });
+  }).catch((err) => {
+    console.error(err);
+    res.status(400).json({ message: 'Google authentication failed' });
   });
 });
 
-// Tamagotchi routes
-app.use('/tamagotchi', tamagotchiRoutes); // Ensure tamagotchiRoutes is implemented properly
-
-// Dashboard route
-app.get('/dashboard', (req, res) => {
-  if (!req.isAuthenticated()) {
-    return res.redirect('/'); // If user is not authenticated, redirect to the homepage
-  }
-  res.json({ message: 'Welcome to your dashboard!', user: req.user });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something went wrong!');
-});
+// Define routes
+app.use('/tamagotchi', tamagotchiRoutes);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('Connected to MongoDB');
-})
-.catch((error) => {
-  console.error('Error connecting to MongoDB:', error);
-});
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => console.error('MongoDB connection error:', err));
 
 // Start the server
 app.listen(PORT, () => {
