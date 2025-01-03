@@ -1,15 +1,14 @@
 // Import necessary modules
 const express = require('express');
 const mongoose = require('mongoose');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const MongoStore = require('connect-mongo');
 const helmet = require('helmet');
-const axios = require('axios');
-const tamagotchiRoutes = require('./routes/tamagotchiRoutes'); // Ensure this route exists
+const tamagotchiRoutes = require('./routes/tamagotchiRoutes');
+const userRoutes = require('./routes/userRoutes');
+const User = require('./models/User');  // Adjust the path as needed
 
 dotenv.config(); // Load environment variables
 
@@ -35,8 +34,8 @@ app.use(helmet.contentSecurityPolicy({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://tamagotchi-backend.onrender.com', // Use your deployed frontend URL here
-  credentials: true,
+  origin: 'http://192.168.129.6:19006', // Adjust for your local frontend URL or deploy URL
+  credentials: true, // Allow credentials (cookies) to be sent
 }));
 
 // Session setup using Mongo store
@@ -56,73 +55,54 @@ app.use(session({
   },
 }));
 
-// Passport initialization
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Google OAuth strategy setup
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_REDIRECT_URI || 'https://tamagotchi-backend.onrender.com/auth/google/callback',
-  scope: ['profile', 'email'],
-}, async (accessToken, refreshToken, profile, done) => {
-  try {
-    console.log('Google profile:', profile); // Debugging log to check the profile data
-    const userId = profile.id;
-    const Tamagotchi = require('./models/Tamagotchi');
-    
-    // Check if user exists in the database
-    let user = await Tamagotchi.findOne({ googleId: userId });
-
-    if (!user) {
-      // If user doesn't exist, create a new one
-      user = await Tamagotchi.create({
-        googleId: userId,
-        userName: profile.displayName,
-        email: profile.emails[0].value,
-        avatar: profile.photos[0].value,
-        hunger: 100,
-        fun: 100,
-      });
-    }
-
-    return done(null, user); // Return the user for session
-  } catch (error) {
-    console.error('Error in Google OAuth:', error);
-    return done(error);
-  }
-}));
-
-// Route for Google OAuth login
-app.post('/auth/google/callback', (req, res) => {
-  const token = req.body.token; // Token from frontend
-
-  if (!token) {
-    return res.status(400).json({ message: 'Token missing' });
-  }
-
-  axios.post('https://oauth2.googleapis.com/tokeninfo', null, {
-    params: {
-      id_token: token,
-    },
-  }).then((response) => {
-    const { sub: googleId, email, name } = response.data;
-
-    res.json({ user: { googleId, email, name } });
-  }).catch((err) => {
-    console.error(err);
-    res.status(400).json({ message: 'Google authentication failed' });
-  });
-});
-
-// Define routes
+// Routes
+app.use('/api/user', userRoutes);
 app.use('/tamagotchi', tamagotchiRoutes);
 
-// Connect to MongoDB
+// Update profile route
+app.put('/tamagotchi/update-profile', async (req, res) => {
+  const { email, userName } = req.body;
+
+  // Validate input
+  if (!email || !userName) {
+    return res.status(400).send({ error: 'Email and username are required.' });
+  }
+
+  try {
+    // Find the user by email and update the username
+    const updatedUser = await User.findOneAndUpdate(
+      { email },
+      { userName },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).send({ error: 'User not found.' });
+    }
+
+    // Update session if needed
+    req.session.user = {
+      email: updatedUser.email,
+      userName: updatedUser.userName,
+    };
+
+    res.status(200).send({
+      message: 'Profile updated successfully.',
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error('Error updating profile:', err);
+    res.status(500).send({ error: 'Failed to update user profile.' });
+  }
+});
+
+// MongoDB Connection with improved error handling
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1); // Exit process on database connection error
+  });
 
 // Start the server
 app.listen(PORT, () => {

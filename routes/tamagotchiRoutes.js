@@ -1,47 +1,52 @@
+// routes/tamagotchiRoutes.js
+
 const express = require('express');
 const router = express.Router();
-const Tamagotchi = require('../models/Tamagotchi');
+const User = require('../models/User');
 
-// Middleware for checking if user is authenticated
-const isAuthenticated = (req, res, next) => {
-  if (!req.user) { // Passport attaches user to req
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  next();
-};
-
-// Create a new Tamagotchi account (unused with Google Login)
-router.post('/create', isAuthenticated, async (req, res) => {
+// Route for login
+router.post('/login', async (req, res) => {
   try {
-    const existingTamagotchi = await Tamagotchi.findOne({ userId: req.user.userId });
-    if (existingTamagotchi) {
-      return res.status(400).json({ message: "User already exists" });
+    const { email } = req.body;
+
+    // Check if user exists by email
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found. Please create an account.' });
     }
 
-    const newTamagotchi = new Tamagotchi({
-      userId: req.user.userId,
-      hunger: 100,
-      fun: 100,
-    });
-    const savedTamagotchi = await newTamagotchi.save();
-    res.status(201).json(savedTamagotchi);
+    res.status(200).json({ message: 'User logged in successfully', user });
   } catch (error) {
-    console.error("Account creation error:", error);
-    res.status(500).json({ message: "Account creation failed" });
+    console.error('Error logging in:', error);
+    res.status(500).json({ message: 'Login failed' });
   }
 });
 
-// Login an existing Tamagotchi account
-router.post('/login', isAuthenticated, async (req, res) => {
+// Route for creating a new user
+router.post('/create', async (req, res) => {
   try {
-    const user = await Tamagotchi.findOne({ userId: req.user.userId });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    const { userName, email } = req.body;
+
+    // Check if user already exists
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ message: 'User already exists. Please log in.' });
     }
-    res.status(200).json(user); // Return user data
+
+    // Create a new user
+    const userId = email.toLowerCase(); // Use email as userId
+    user = await User.create({
+      userId,
+      userName: userName || 'Default User', // Fallback to default username if not provided
+      email,
+      avatar: 'default-avatar.png',
+    });
+
+    res.status(201).json({ message: 'User created successfully', user });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Login failed" });
+    console.error('Error creating user:', error);
+    res.status(500).json({ message: 'Failed to create user' });
   }
 });
 
