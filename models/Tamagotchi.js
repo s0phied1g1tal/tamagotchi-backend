@@ -1,12 +1,12 @@
-// models/Tamagotchi.js
 const mongoose = require('mongoose');
 
-const TamagotchiSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  hunger: { type: Number, default: 50 },
-  fun: { type: Number, default: 50 },
-  avatar: { type: String, default: 'default-avatar.png' }, // Can be changed later
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true },
+  userName: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
 });
 
-module.exports = mongoose.model('Tamagotchi', TamagotchiSchema);
+module.exports = mongoose.model('User', userSchema);
+
 
